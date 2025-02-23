@@ -33,6 +33,7 @@ class Config:
     learning_rate: float = 1e-4
     train_ratio: float = 0.8
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
+    save_path: str = "output/model"
 
     @property
     def input_dim(self) -> int:
@@ -168,10 +169,16 @@ class Trainer:
         fig, axes = plt.subplots(1, 4 if target_frames is not None else 3, figsize=(16, 4))
         plt.close()
 
-        input_frames = input_frames.cpu().detach().numpy()
-        predicted_frames = predicted_frames.cpu().detach().numpy()
+        # Convert tensors from (B, T, C, H, W) to (B, T, H, W, C)
+        def prepare_frames(frames):
+            frames = frames.cpu().detach().numpy()
+            frames = np.transpose(frames, (0, 1, 3, 4, 2))
+            return frames
+
+        input_frames = prepare_frames(input_frames)
+        predicted_frames = prepare_frames(predicted_frames)
         if target_frames is not None:
-            target_frames = target_frames.cpu().detach().numpy()
+            target_frames = prepare_frames(target_frames)
 
         def animate(frame_idx):
             for ax in axes:
@@ -193,12 +200,28 @@ class Trainer:
                 axes[idx].set_title(title)
 
         anim = FuncAnimation(
-            fig, animate, frames=1,
-            interval=1000, repeat=True, blit=False
+            fig, animate, frames=20,
+            interval=200,
+            repeat=True,
+            blit=False
         )
         
         plt.close()
-        return HTML(anim.to_jshtml())
+        return HTML(anim.to_jshtml(default_mode='loop'))
+
+    def save_model(self) -> None:
+        """Save the trained model and optimizer state."""
+        save_path = Path(self.config.save_path)
+        save_path.mkdir(parents=True, exist_ok=True)
+        
+        checkpoint = {
+            'model_state_dict': self.model.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'config': self.config
+        }
+        
+        torch.save(checkpoint, save_path / 'vfi_model.pth')
+        logger.info(f"Model saved to {save_path / 'vfi_model.pth'}")
 
     def evaluate(self, test_loader: DataLoader) -> Tuple[float, HTML]:
         self.model.eval()
@@ -295,5 +318,7 @@ def run_training(video_path: str, config: Optional[Config] = None) -> HTML:
     logger.info("Evaluating model and generating visualization...")
     test_loss, visualization = trainer.evaluate(test_loader)
     logger.info(f"Test Loss: {test_loss:.4f}")
+    
+    trainer.save_model()
     
     return visualization
