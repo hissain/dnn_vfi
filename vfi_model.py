@@ -163,10 +163,9 @@ class Trainer:
             
         return total_loss / len(dataloader)
 
-    def create_visualization(self, input_frames: torch.Tensor, predicted_frames: torch.Tensor, 
-                           target_frames: Optional[torch.Tensor] = None) -> HTML:
+    def create_visualization(self, input_frames: torch.Tensor, predicted_frames: torch.Tensor) -> HTML:
         plt.ioff()
-        fig, axes = plt.subplots(1, 4 if target_frames is not None else 3, figsize=(16, 4))
+        fig, axes = plt.subplots(3, 3, figsize=(15, 15))
         plt.close()
 
         # Convert tensors from (B, T, C, H, W) to (B, T, H, W, C)
@@ -175,33 +174,45 @@ class Trainer:
             frames = np.transpose(frames, (0, 1, 3, 4, 2))
             return frames
 
-        input_frames = prepare_frames(input_frames)
-        predicted_frames = prepare_frames(predicted_frames)
-        if target_frames is not None:
-            target_frames = prepare_frames(target_frames)
+        # Prepare frames for the first 9 sequences
+        input_frames = prepare_frames(input_frames[:9])  # Take first 9 samples
+        predicted_frames = prepare_frames(predicted_frames[:9])
 
-        def animate(frame_idx):
-            for ax in axes:
-                ax.clear()
-                ax.axis('off')
-
-            frames = [
-                (input_frames[0, 0], "Input Frame 1"),
-                (predicted_frames[0, 0], "Predicted Frame"),
-                (input_frames[0, 1], "Input Frame 2")
+        # Create sequence of 3 frames for each sample: frame1 -> predicted -> frame2
+        def create_sequence(idx):
+            return [
+                (input_frames[idx, 0], "Frame 1"),
+                (predicted_frames[idx, 0], "Predicted"),
+                (input_frames[idx, 1], "Frame 2")
             ]
-            
-            if target_frames is not None:
-                frames.insert(2, (target_frames[0, 0], "Ground Truth"))
 
-            for idx, (frame, title) in enumerate(frames):
-                frame = np.clip(frame, 0, 1)
-                axes[idx].imshow(frame)
-                axes[idx].set_title(title)
+        sequences = [create_sequence(i) for i in range(min(9, len(input_frames)))]
+        frame_idx = 0
 
+        def animate(t):
+            nonlocal frame_idx
+            frame_idx = (frame_idx + 1) % 3  # Cycle through 3 frames
+
+            for i in range(3):
+                for j in range(3):
+                    seq_idx = i * 3 + j
+                    if seq_idx < len(sequences):
+                        ax = axes[i, j]
+                        ax.clear()
+                        ax.axis('off')
+                        
+                        # Get current frame from sequence
+                        frame, title = sequences[seq_idx][frame_idx]
+                        frame = np.clip(frame, 0, 1)
+                        ax.imshow(frame)
+                        ax.set_title(f'Sequence {seq_idx + 1}: {title}')
+
+            plt.tight_layout()
+
+        # Create animation with faster playback
         anim = FuncAnimation(
-            fig, animate, frames=20,
-            interval=200,
+            fig, animate, frames=30,  # More frames for smoother loop
+            interval=300,  # 300ms between frames
             repeat=True,
             blit=False
         )
@@ -225,8 +236,16 @@ class Trainer:
 
     def evaluate(self, test_loader: DataLoader) -> Tuple[float, HTML]:
         self.model.eval()
-        total_loss = 0
-        test_batch = next(iter(test_loader))
+        
+        # Get 9 test samples
+        test_samples = []
+        for batch in test_loader:
+            test_samples.append(batch)
+            if len(test_samples) * batch.size(0) >= 9:
+                break
+                
+        # Concatenate batches and take first 9 samples
+        test_batch = torch.cat(test_samples, dim=0)[:9]
         
         with torch.no_grad():
             test_batch = test_batch.to(self.config.device)
@@ -238,7 +257,7 @@ class Trainer:
             pred_frames = self.model(input_frames)
             loss = self.criterion(pred_frames, target_frames)
             
-            visualization = self.create_visualization(input_frames, pred_frames, target_frames)
+            visualization = self.create_visualization(input_frames, pred_frames)
             
         return loss.item(), visualization
 
