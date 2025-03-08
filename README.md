@@ -1,4 +1,4 @@
-# Video Frame Interpolation (VFI) - ML Demo
+# Video Frame Interpolation (VFI) - Demo Using DNN
 
 This repository contains a machine learning demo for video frame interpolation (VFI) using three different models: UNet, RIFE, and Mamba. The goal is to predict an intermediate frame (2nd frame) given the 1st and 3rd frames as input. The project is under the MIT license.
 
@@ -39,15 +39,13 @@ __Mamba:__ A sequence modeling architecture applied to frame interpolation.
 
 * Training notebooks for different models.
 
-* Comparison of different architectures for VFI.
-
 ## 🔧 Installation
 
 Clone the repository and install dependencies:
 
 ```
-git clone https://github.com/hissain/dnn_video_interp.git
-cd dnn_video_interp
+git clone https://github.com/hissain/dnn_vfi.git
+cd dnn_vfi
 pip install -r requirements.txt
 ```
 
